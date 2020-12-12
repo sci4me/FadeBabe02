@@ -7,9 +7,9 @@
 #include "fbsrc.h"
 
 
+u8* memset(u8 *p, u8 c, u16 n);
 u8* memcpy(u8 *dst, u8 *src, u16 n);
 u8 memcmp(u8 *a, u8 *b, u16 n);
-u8* memset(u8 *p, u8 c, u16 n);
 u16 strlen(char *s);
 
 
@@ -77,8 +77,8 @@ static u16 comp_buf_next = 0;
 
 #define MEM_END         0x7F00 // beginning of MMIO page
 
-#define HEAP_FROM_START 0x3400
-#define HEAP_TO_START   0x5200
+#define HEAP_FROM_START 0x3800
+#define HEAP_TO_START   0x5B00
 
 static u8 *heap = (u8*)HEAP_FROM_START;
 static GCObj *heap_root = 0;
@@ -343,30 +343,47 @@ dispatch:
         vmbreak;
     }
     vmcase(NOT) {
-        if(stack[sp-1]._int) stack[sp-1]._int = 0;
-        else stack[sp-1]._int = 1;
+        if(stack[sp-1].tag == V_BOOL) {
+            if(stack[sp-1]._int) stack[sp-1]._int = 0;
+            else stack[sp-1]._int = 1;
+        } else if(stack[sp-1].tag == V_INT) {
+            stack[sp-1]._int = ~stack[sp-1]._int;
+        } else {
+            panic(0x38);
+        }
         vmbreak;
     }
     vmcase(AND) {
-        panic(0x80);
+        --sp;
+        if(stack[sp].tag == V_BOOL && stack[sp-1].tag == V_BOOL) {
+            stack[sp-1]._int = stack[sp]._int && stack[sp-1]._int;
+        } else if(stack[sp].tag == V_INT && stack[sp-1].tag == V_INT) {
+            stack[sp-1]._int = stack[sp]._int & stack[sp-1]._int;
+        } else {
+            panic(0x49);
+        }
         vmbreak;
     }
     vmcase(OR) {
-        panic(0x81);
+        --sp;
+        if(stack[sp].tag == V_BOOL && stack[sp-1].tag == V_BOOL) {
+            stack[sp-1]._int = stack[sp]._int || stack[sp-1]._int;
+        } else if(stack[sp].tag == V_INT && stack[sp-1].tag == V_INT) {
+            stack[sp-1]._int = stack[sp]._int | stack[sp-1]._int;
+        } else {
+            panic(0x4A);
+        }
         vmbreak;
     }
     vmcase(LOAD) {
-        --sp;
-        i = stack[sp]._int;
-        memcpy(&stack[sp], &globals[i], sizeof(Value));
-        ++sp;
+        i = stack[sp-1]._int;
+        memcpy(&stack[sp-1], &globals[i], sizeof(Value));
         vmbreak;
     }
     vmcase(STORE) {
-        --sp;
-        i = stack[sp]._int;
-        --sp;
-        memcpy(&globals[i], &stack[sp], sizeof(Value));
+        i = stack[sp-1]._int;
+        memcpy(&globals[i], &stack[sp-2], sizeof(Value));
+        sp -= 2;
         vmbreak;
     }
     vmcase(STACKSIZE) {
@@ -586,6 +603,7 @@ _1:             x = (u16)v;
                 break;
             default:
                 if(is_digit(c)) {
+                    // TODO: hex and binary numbers
                     n = 1;
                     x = 0;
                     m = 1;
@@ -621,10 +639,18 @@ _1:             x = (u16)v;
                        n++;
                     }
 
-                    x = (u16)intern(xp, n);
-                    emit(OP_PUSHSYM);
-                    emit((u8)((x >> 8) & 0xFF));
-                    emit((u8)(x & 0xFF));
+                    if(n == 4 && memcmp(xp, "true", 4) == 0) {
+                        emit(OP_PUSHTRUE);
+                    } else if(n == 5 && memcmp(xp, "false", 5) == 0) {
+                        emit(OP_PUSHFALSE);
+                    } else if(n == 3 && memcmp(xp, "nil", 3) == 0) {
+                        emit(OP_PUSHNIL);
+                    } else {
+                        x = (u16)intern(xp, n);
+                        emit(OP_PUSHSYM);
+                        emit((u8)((x >> 8) & 0xFF));
+                        emit((u8)(x & 0xFF));
+                    }
                 } else {
                     // TODO: cry
                     acia_put_hex_byte(c);
