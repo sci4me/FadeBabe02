@@ -25,6 +25,10 @@ static u8 is_alpha(char c) {
     return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z');
 }
 
+static u8 is_hex(char c) {
+    return (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F');
+}
+
 
 typedef struct Intern {
     u8 len;
@@ -473,11 +477,9 @@ static Value* compile(LexState *l) {
     Value *result;
     Value *v;
     char c;
-    u8 level;
-    u8 n;
-    u16 x;
-    u16 m;
     char *xp;
+    u8 level, n, r, s;
+    u16 x, m;
 
     // TODO: overflow
     #define emit(x) do { comp_buf[comp_buf_next++] = x; code_size++; } while(0)
@@ -608,20 +610,47 @@ _1:             x = (u16)v;
                     x = 0;
                     m = 1;
 
-                    while(*l->p && is_digit(*l->p)) {
-                        // TODO: overflow
-                        if(n == 255) panic(0x03);
+                    if(*l->p == 'x') {
+                        r = 16;
+                        s = 4;
+                        n = 0;
+                        ++l->p;
+                    } else if(*l->p == 'b') {
+                        r = 2;
+                        s = 16;
+                        n = 0;
+                        ++l->p;
+                    } else {
+                        r = 10;
+                        s = 5;
+                    }
 
-                        l->p++;
-                        n++;
+                    while(c = *l->p) {
+                        if(r == 16 && !(is_digit(c) || is_hex(c))) break;
+                        else if(r == 10 && !is_digit(c)) break;
+                        else if(r == 2 && !(c == '0' || c == '1')) break;
+
+                        // TODO: overflow
+                        if(n == s) panic(0x03);
+
+                        ++l->p;
+                        ++n;
                     }
 
                     xp = l->p - 1;
                     for(; n > 0; n--) {
-                        u8 d = *xp - '0';
+                        u8 d = *xp;
                         --xp;
+
+                        if((d == 'x' && r == 16) || (d == 'b' && r == 2)) continue;
+
+                        if(d >= '0' && d <= '9') d -= '0';
+                        else if(d >= 'a' && d <= 'f') d = d - 'a' + 10;
+                        else if(d >= 'A' && d <= 'F') d = d - 'A' + 10;
+                        else panic(0x76);
+
                         x += d * m;
-                        m *= 10;
+                        m *= r;
                     }
 
                     emit(OP_PUSHINT);
