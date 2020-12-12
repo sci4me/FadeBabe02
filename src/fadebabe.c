@@ -81,8 +81,8 @@ static u16 comp_buf_next = 0;
 
 #define MEM_END         0x7F00 // beginning of MMIO page
 
-#define HEAP_FROM_START 0x4000
-#define HEAP_TO_START   0x5F80
+#define HEAP_FROM_START 0x5000
+#define HEAP_TO_START   0x6780
 
 static u8 *heap = (u8*)HEAP_FROM_START;
 static GCObj *heap_root = 0;
@@ -116,6 +116,9 @@ void __print(void) {
             break;
         case V_OBJECT:
             acia_puts("<object>");
+            break;
+        case V_ARRAY:
+            acia_puts("<array>");
             break;
         case V_STRING:
             acia_puts(v->gc._str);
@@ -197,6 +200,31 @@ void __switch2_read(void) {
     ++sp;
 }
 
+void __append(void) {
+    Array *a;
+    --sp;
+    if(stack[sp].tag == V_REF && stack[sp].fwd->tag == V_ARRAY) {
+        a = stack[sp].fwd->gc._arr;
+        if(a->count == a->size) {
+            panic(0x00); // TODO: realloc or such
+        }
+
+        memcpy(&a->data[a->count++], &stack[sp-1], sizeof(Value));
+    } else {
+        panic(0x3F);
+    }
+    --sp;
+}
+
+void __cnt(void) {
+    if(stack[sp-1].tag == V_REF && stack[sp-1].fwd->tag == V_ARRAY) {
+        stack[sp-1].tag = V_INT;
+        stack[sp-1]._int = stack[sp-1].fwd->gc._arr->count;
+    } else {
+        panic(0x3E);
+    }
+}
+
 void init_natives(void) {
     #define addnative(name) do { intern(#name, sizeof(#name)-1); globals[i].tag = V_NATIVE; globals[i].native = __##name; ++i; } while(0)
     u8 i = 0;
@@ -209,6 +237,8 @@ void init_natives(void) {
     addnative(delayms);
     addnative(switch1_read);
     addnative(switch2_read);
+    addnative(append);
+    addnative(cnt);
 
     #undef addnative
 }
@@ -219,6 +249,7 @@ static void interpret(Value *fn) {
 
     u8 op;
     u8 i;
+    u16 j;
     char *s;
     Value v;
     Value *vp1;
@@ -253,8 +284,9 @@ static void interpret(Value *fn) {
         &&T_DROP,
         &&T_SWAP,
         &&T_NEWOBJ,
-        &&T_GETPROP,
-        &&T_SETPROP,
+        &&T_NEWARR,
+        &&T_GET,
+        &&T_SET,
         &&T_EXEC,
         &&T_CONDEXEC,
         &&T_WHILE
@@ -463,12 +495,48 @@ dispatch:
         panic(0x82);
         vmbreak;
     }
-    vmcase(GETPROP) {
-        panic(0x83);
+    vmcase(NEWARR) {
+        vp1 = (Value*)gc_alloc(sizeof(Value) + sizeof(Value) * ARR_DEFAULT_SIZE);
+        vp1->tag = V_ARRAY;
+        vp1->gc._arr = (Array*)(((u8*)vp1) + sizeof(Value));
+        vp1->gc._arr->count = 0;
+        vp1->gc._arr->size = ARR_DEFAULT_SIZE;
+        stack[sp].tag = V_REF;
+        stack[sp].fwd = vp1;
+        ++sp;
         vmbreak;
     }
-    vmcase(SETPROP) {
-        panic(0x84);
+    vmcase(GET) {
+        --sp;
+        if(stack[sp].tag == V_REF && stack[sp].fwd->tag == V_ARRAY && stack[sp-1].tag == V_INT) {
+            j = stack[sp-1]._int;
+            if(j < stack[sp].fwd->gc._arr->count) {
+                memcpy(&stack[sp-1], &stack[sp].fwd->gc._arr->data[j], sizeof(Value));
+            } else {
+                panic(0x21);
+            }
+        } else {
+            acia_put_hex_byte(stack[sp].tag);
+            acia_put_hex_byte(stack[sp].fwd->tag);
+            acia_put_hex_byte(stack[sp-1].tag);
+            acia_putc('\n');
+            panic(0x11);
+        }
+        vmbreak;
+    }
+    vmcase(SET) {
+        --sp;
+        if(stack[sp].tag == V_REF && stack[sp].fwd->tag == V_ARRAY && stack[sp-1].tag == V_INT) {
+            j = stack[sp-1]._int;
+            if(i < stack[sp].fwd->gc._arr->count) {
+                memcpy(&stack[sp].fwd->gc._arr->data[j], &stack[sp-2], sizeof(Value));
+            } else {
+                panic(0x22);
+            }
+        } else {
+            panic(0x12);
+        }
+        --sp;
         vmbreak;
     }
     vmcase(EXEC) {
@@ -636,11 +704,14 @@ _1:             x = (u16)v;
             case '\\':
                 emit(OP_NEWOBJ);
                 break;
+            case '_':
+                emit(OP_NEWARR);
+                break;
             case ',':
-                emit(OP_GETPROP);
+                emit(OP_GET);
                 break;
             case '.':
-                emit(OP_SETPROP);
+                emit(OP_SET);
                 break;
             case '!':
                 emit(OP_EXEC);
@@ -654,16 +725,15 @@ _1:             x = (u16)v;
             default:
                 if(is_digit(c)) {
                     // TODO: hex and binary numbers
-                    n = 1;
                     x = 0;
                     m = 1;
 
-                    if(*l->p == 'x') {
+                    if(c == '0' && *l->p == 'x') {
                         r = 16;
                         s = 4;
                         n = 0;
                         ++l->p;
-                    } else if(*l->p == 'b') {
+                    } else if(c == '0' && *l->p == 'b') {
                         r = 2;
                         s = 16;
                         n = 0;
@@ -671,6 +741,7 @@ _1:             x = (u16)v;
                     } else {
                         r = 10;
                         s = 5;
+                        n = 1;
                     }
 
                     while(c = *l->p) {
@@ -683,6 +754,14 @@ _1:             x = (u16)v;
 
                         ++l->p;
                         ++n;
+                    }
+
+                    if(r != 10 && n == 0) {
+                        --l->p;
+                        emit(OP_PUSHINT);
+                        emit(0);
+                        emit(0);
+                        break;
                     }
 
                     xp = l->p - 1;

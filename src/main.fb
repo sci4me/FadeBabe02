@@ -1,11 +1,16 @@
-0
-[true][
-    $setleds;!
-    1+
-    250 delayms;!   
-]#
+_xs:
 
+"a" xs; append;!
+"b" xs; append;!
+"c" xs; append;!
+"d" xs; append;!
 
+xs; cnt;! println;!
+
+0xs;,println;!
+1xs;,println;!
+2xs;,println;!
+3xs;,println;!
 
 
 {

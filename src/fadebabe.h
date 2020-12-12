@@ -31,8 +31,9 @@ enum {
     OP_DROP,
     OP_SWAP,
     OP_NEWOBJ,
-    OP_GETPROP,
-    OP_SETPROP,
+    OP_NEWARR,
+    OP_GET,
+    OP_SET,
     OP_EXEC,
     OP_CONDEXEC,
     OP_WHILE,
@@ -45,6 +46,13 @@ typedef struct Object {
 } Object;
 
 
+typedef struct Array {
+    u16 count;
+    u16 size;
+    struct Value data[];
+} Array;
+
+
 typedef struct Lambda {
     u16 code_size;
     u8 code[];
@@ -54,16 +62,20 @@ typedef struct Lambda {
 #define V_NIL       0
 #define V_BOOL      1
 #define V_OBJECT    2
-#define V_STRING    3
-#define V_INT       4
-#define V_LAMBDA    5
-#define V_SYM       6
-#define V_FORWARD   7
-#define V_NATIVE    8
-#define V_REF       9
+#define V_ARRAY     3
+#define V_STRING    4
+#define V_INT       5
+#define V_LAMBDA    6
+#define V_SYM       7
+#define V_FORWARD   8
+#define V_NATIVE    9
+#define V_REF       10
 
 #define V_MASK_TYPE 0x0F
 #define V_MASK_MARK 0x80
+
+
+#define ARR_DEFAULT_SIZE 4
 
 
 typedef struct GCObj {
@@ -71,6 +83,7 @@ typedef struct GCObj {
     struct GCObj *next;
     union {
         Object *_obj;
+        Array *_arr;
         char *_str;
         Lambda *_lam;
     };
