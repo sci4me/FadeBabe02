@@ -513,13 +513,13 @@ static Value* compile(LexState *l) {
                 xp = l->p;
                 while((c = *l->p) && c != '"') ++l->p;
                 if(*l->p++ != '"') panic(0x59);
-                n = l->p - xp - 1;
+                m = l->p - xp - 1;
 
-                v = (Value*)gc_alloc(sizeof(Value) + n);
+                v = (Value*)gc_alloc(sizeof(Value) + m + 1);
                 v->tag = V_STRING;
                 v->gc._str = (char*)((u8*)v) + sizeof(Value);
-                memcpy(v->gc._str, xp, n);
-                v->gc._str[n] = 0;
+                memcpy(v->gc._str, xp, m);
+                v->gc._str[m] = 0;
 
                 goto _1;
                 break;

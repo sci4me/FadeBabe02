@@ -1,5 +1,4 @@
-0xFADE println;!
-0b10010110 println;!
+"foo bar baz" println;!
 
 
 {
