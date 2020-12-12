@@ -81,8 +81,8 @@ static u16 comp_buf_next = 0;
 
 #define MEM_END         0x7F00 // beginning of MMIO page
 
-#define HEAP_FROM_START 0x3800
-#define HEAP_TO_START   0x5B00
+#define HEAP_FROM_START 0x4000
+#define HEAP_TO_START   0x5F80
 
 static u8 *heap = (u8*)HEAP_FROM_START;
 static GCObj *heap_root = 0;
@@ -161,12 +161,54 @@ void __println(void) {
     acia_putc('\n');
 }
 
+void __putchar(void) {
+    --sp;
+    if(stack[sp].tag != V_INT) panic(0x59);
+    acia_putc((u8)(stack[sp]._int & 0xFF));
+}
+
+void __getchar(void) {
+    stack[sp].tag = V_INT;
+    stack[sp]._int = acia_getc();
+    ++sp;
+}
+
+void __setleds(void) {
+    --sp;
+    if(stack[sp].tag != V_INT) panic(0x5C);
+    leds_set_value((u8)(stack[sp]._int & 0xFF));
+}
+
+void __delayms(void) {
+    --sp;
+    if(stack[sp].tag != V_INT) panic(0x5D);
+    delay_ms((u8)(stack[sp]._int & 0xFF));
+}
+
+void __switch1_read(void) {
+    stack[sp].tag = V_INT;
+    stack[sp]._int = switch1_read();
+    ++sp;
+}
+
+void __switch2_read(void) {
+    stack[sp].tag = V_INT;
+    stack[sp]._int = switch2_read();
+    ++sp;
+}
+
 void init_natives(void) {
     #define addnative(name) do { intern(#name, sizeof(#name)-1); globals[i].tag = V_NATIVE; globals[i].native = __##name; ++i; } while(0)
     u8 i = 0;
 
     addnative(print);
     addnative(println);
+    addnative(putchar);
+    addnative(getchar);
+    addnative(setleds);
+    addnative(delayms);
+    addnative(switch1_read);
+    addnative(switch2_read);
 
     #undef addnative
 }
@@ -238,7 +280,13 @@ dispatch:
     acia_puts(": ");
     #endif
     op = fetch8();
-    if(op >= N_OPS) panic(0xF6);
+    if(op >= N_OPS) {
+        put_hex_word(pc);
+        acia_puts(": ");
+        acia_put_hex_byte(op);
+        acia_putc('\n');
+        panic(0xF6);
+    }
     #if TRACE
     acia_put_hex_byte(op);
     acia_putc('\n');

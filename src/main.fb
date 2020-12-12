@@ -1,4 +1,11 @@
-"foo bar baz" println;!
+0
+[true][
+    $setleds;!
+    1+
+    250 delayms;!   
+]#
+
+
 
 
 {
