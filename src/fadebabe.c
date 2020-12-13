@@ -216,16 +216,20 @@ static void __switch2_read(void) {
 }
 
 static void __apnd(void) {
+    Value *av;
     Array *a;
     Value *v;
     u16 nsize;
     --sp;
-    if(stack[sp].tag == V_REF && stack[sp].fwd->tag == V_ARRAY) {
-        a = stack[sp].fwd->gc._arr;
+    av = resolve(&stack[sp]);
+    if(av->tag == V_ARRAY) {
+        a = av->gc._arr;
         if(a->count == a->size) {
             nsize = a->size * 2;
             v = (Value*)gc_alloc(sizeof(Value) + sizeof(Value) * nsize);
             v->tag = V_ARRAY;
+            v->gc.next = heap_root;
+            heap_root = &v->gc;
             v->gc._arr = (Array*)(((u8*)v) + sizeof(Value));
             v->gc._arr->count = a->count;
             v->gc._arr->size = nsize;
@@ -526,6 +530,8 @@ dispatch:
     vmcase(NEWARR) {
         vp1 = (Value*)gc_alloc(sizeof(Value) + sizeof(Value) * ARR_DEFAULT_SIZE);
         vp1->tag = V_ARRAY;
+        vp1->gc.next = heap_root;
+        heap_root = &vp1->gc;
         vp1->gc._arr = (Array*)(((u8*)vp1) + sizeof(Value));
         vp1->gc._arr->count = 0;
         vp1->gc._arr->size = ARR_DEFAULT_SIZE;
@@ -662,6 +668,8 @@ static Value* compile(LexState *l) {
 
                 v = (Value*)gc_alloc(sizeof(Value) + m + 1);
                 v->tag = V_STRING;
+                v->gc.next = heap_root;
+                heap_root = &v->gc;
                 v->gc._str = (char*)((u8*)v) + sizeof(Value);
                 memcpy(v->gc._str, xp, m);
                 v->gc._str[m] = 0;
@@ -851,7 +859,7 @@ _end:
     result = (Value*)gc_alloc(sizeof(Value) + sizeof(Lambda) + code_size);
     result->tag = V_LAMBDA;
     result->gc.next = heap_root;
-    heap_root = (GCObj*)result;
+    heap_root = &result->gc;
     result->gc._lam = (Lambda*)(((u8*)result) + sizeof(Value));
     result->gc._lam->code_size = code_size;
     memcpy(result->gc._lam->code, &comp_buf[mark], code_size);

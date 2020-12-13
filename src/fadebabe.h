@@ -79,7 +79,6 @@ typedef struct Lambda {
 
 
 typedef struct GCObj {
-    u8 tag;
     struct GCObj *next;
     union {
         Object *_obj;

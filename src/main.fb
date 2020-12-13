@@ -20,6 +20,11 @@ xs; cnt;! println;!
 4xs;,println;!
 
 
+[
+    
+]
+
+
 {
 [$2%0=$[^2/^]?~[3*1+]?]collatz:
 [n:0s:[n;1=~][n;collatz;!n:s;1+s:]#s;]steps:
