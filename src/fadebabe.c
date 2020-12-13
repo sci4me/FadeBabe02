@@ -100,7 +100,16 @@ static Value stack[0x40];
 static u8 sp = 0;
 
 
-void __print(void) {
+static Value* resolve(Value *v) {
+    if(v->tag == V_REF || v->tag == V_FORWARD) {
+        return resolve(v->fwd);
+    } else {
+        return v;
+    }
+}
+
+
+static void __print(void) {
     Value *v = &stack[--sp];
     
     if(v->tag == V_REF) {
@@ -159,54 +168,71 @@ void __print(void) {
     }
 }
 
-void __println(void) {
+static void __println(void) {
     __print();
     acia_putc('\n');
 }
 
-void __putchar(void) {
+static void __printhex(void) {
+    --sp;
+    if(stack[sp].tag != V_INT) panic(0xD3);
+    put_hex_word(stack[sp]._int);
+}
+
+static void __putchar(void) {
     --sp;
     if(stack[sp].tag != V_INT) panic(0x59);
     acia_putc((u8)(stack[sp]._int & 0xFF));
 }
 
-void __getchar(void) {
+static void __getchar(void) {
     stack[sp].tag = V_INT;
     stack[sp]._int = acia_getc();
     ++sp;
 }
 
-void __setleds(void) {
+static void __setleds(void) {
     --sp;
     if(stack[sp].tag != V_INT) panic(0x5C);
     leds_set_value((u8)(stack[sp]._int & 0xFF));
 }
 
-void __delayms(void) {
+static void __delayms(void) {
     --sp;
     if(stack[sp].tag != V_INT) panic(0x5D);
     delay_ms((u8)(stack[sp]._int & 0xFF));
 }
 
-void __switch1_read(void) {
+static void __switch1_read(void) {
     stack[sp].tag = V_INT;
     stack[sp]._int = switch1_read();
     ++sp;
 }
 
-void __switch2_read(void) {
+static void __switch2_read(void) {
     stack[sp].tag = V_INT;
     stack[sp]._int = switch2_read();
     ++sp;
 }
 
-void __append(void) {
+static void __apnd(void) {
     Array *a;
+    Value *v;
+    u16 nsize;
     --sp;
     if(stack[sp].tag == V_REF && stack[sp].fwd->tag == V_ARRAY) {
         a = stack[sp].fwd->gc._arr;
         if(a->count == a->size) {
-            panic(0x00); // TODO: realloc or such
+            nsize = a->size * 2;
+            v = (Value*)gc_alloc(sizeof(Value) + sizeof(Value) * nsize);
+            v->tag = V_ARRAY;
+            v->gc._arr = (Array*)(((u8*)v) + sizeof(Value));
+            v->gc._arr->count = a->count;
+            v->gc._arr->size = nsize;
+            memcpy(v->gc._arr->data, a->data, sizeof(Value) * a->size);
+            stack[sp].fwd->tag = V_FORWARD;
+            stack[sp].fwd->fwd = v;
+            a = v->gc._arr;
         }
 
         memcpy(&a->data[a->count++], &stack[sp-1], sizeof(Value));
@@ -216,28 +242,30 @@ void __append(void) {
     --sp;
 }
 
-void __cnt(void) {
-    if(stack[sp-1].tag == V_REF && stack[sp-1].fwd->tag == V_ARRAY) {
+static void __cnt(void) {
+    Value *a = resolve(&stack[sp-1]);
+    if(a->tag == V_ARRAY) {
         stack[sp-1].tag = V_INT;
-        stack[sp-1]._int = stack[sp-1].fwd->gc._arr->count;
+        stack[sp-1]._int = a->gc._arr->count;
     } else {
         panic(0x3E);
     }
 }
 
-void init_natives(void) {
+static void init_natives(void) {
     #define addnative(name) do { intern(#name, sizeof(#name)-1); globals[i].tag = V_NATIVE; globals[i].native = __##name; ++i; } while(0)
     u8 i = 0;
 
     addnative(print);
     addnative(println);
+    addnative(printhex);
     addnative(putchar);
     addnative(getchar);
     addnative(setleds);
     addnative(delayms);
     addnative(switch1_read);
     addnative(switch2_read);
-    addnative(append);
+    addnative(apnd);
     addnative(cnt);
 
     #undef addnative
@@ -508,16 +536,16 @@ dispatch:
     }
     vmcase(GET) {
         --sp;
-        if(stack[sp].tag == V_REF && stack[sp].fwd->tag == V_ARRAY && stack[sp-1].tag == V_INT) {
+        vp1 = resolve(&stack[sp]);
+        if(vp1->tag == V_ARRAY && stack[sp-1].tag == V_INT) {
             j = stack[sp-1]._int;
-            if(j < stack[sp].fwd->gc._arr->count) {
-                memcpy(&stack[sp-1], &stack[sp].fwd->gc._arr->data[j], sizeof(Value));
+            if(j < vp1->gc._arr->count) {
+                memcpy(&stack[sp-1], &vp1->gc._arr->data[j], sizeof(Value));
             } else {
                 panic(0x21);
             }
         } else {
-            acia_put_hex_byte(stack[sp].tag);
-            acia_put_hex_byte(stack[sp].fwd->tag);
+            acia_put_hex_byte(vp1->tag);
             acia_put_hex_byte(stack[sp-1].tag);
             acia_putc('\n');
             panic(0x11);
@@ -526,10 +554,11 @@ dispatch:
     }
     vmcase(SET) {
         --sp;
-        if(stack[sp].tag == V_REF && stack[sp].fwd->tag == V_ARRAY && stack[sp-1].tag == V_INT) {
+        vp1 = resolve(&stack[sp]);
+        if(vp1->tag == V_ARRAY && stack[sp-1].tag == V_INT) {
             j = stack[sp-1]._int;
-            if(i < stack[sp].fwd->gc._arr->count) {
-                memcpy(&stack[sp].fwd->gc._arr->data[j], &stack[sp-2], sizeof(Value));
+            if(i < vp1->gc._arr->count) {
+                memcpy(&vp1->gc._arr->data[j], &stack[sp-2], sizeof(Value));
             } else {
                 panic(0x22);
             }
