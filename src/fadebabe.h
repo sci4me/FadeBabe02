@@ -75,6 +75,9 @@ typedef struct Lambda {
 #define V_MASK_MARK 0x80
 
 
+#define v2a(v) (v->gc._arr)
+
+
 #define ARR_DEFAULT_SIZE 4
 
 

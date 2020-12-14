@@ -85,7 +85,7 @@ static u16 comp_buf_next = 0;
 #define HEAP_TO_START   0x6780
 
 static u8 *heap = (u8*)HEAP_FROM_START;
-static GCObj *heap_root = 0;
+static GCObj *heap_last = 0;
 
 static u8* gc_alloc(u16 n) {
     // TODO: check if out of memory and do gc
@@ -228,8 +228,8 @@ static void __apnd(void) {
             nsize = a->size * 2;
             v = (Value*)gc_alloc(sizeof(Value) + sizeof(Value) * nsize);
             v->tag = V_ARRAY;
-            v->gc.next = heap_root;
-            heap_root = &v->gc;
+            v->gc.next = heap_last;
+            heap_last = &v->gc;
             v->gc._arr = (Array*)(((u8*)v) + sizeof(Value));
             v->gc._arr->count = a->count;
             v->gc._arr->size = nsize;
@@ -250,7 +250,7 @@ static void __cnt(void) {
     Value *a = resolve(&stack[sp-1]);
     if(a->tag == V_ARRAY) {
         stack[sp-1].tag = V_INT;
-        stack[sp-1]._int = a->gc._arr->count;
+        stack[sp-1]._int = v2a(a)->count;
     } else {
         panic(0x3E);
     }
@@ -286,6 +286,7 @@ static void interpret(Value *fn) {
     Value v;
     Value *vp1;
     Value *vp2;
+    Array *a;
     u16 pc = 0;
     u16 code_size = fn->gc._lam->code_size;
     u8 *code = fn->gc._lam->code;
@@ -530,8 +531,8 @@ dispatch:
     vmcase(NEWARR) {
         vp1 = (Value*)gc_alloc(sizeof(Value) + sizeof(Value) * ARR_DEFAULT_SIZE);
         vp1->tag = V_ARRAY;
-        vp1->gc.next = heap_root;
-        heap_root = &vp1->gc;
+        vp1->gc.next = heap_last;
+        heap_last = &vp1->gc;
         vp1->gc._arr = (Array*)(((u8*)vp1) + sizeof(Value));
         vp1->gc._arr->count = 0;
         vp1->gc._arr->size = ARR_DEFAULT_SIZE;
@@ -563,8 +564,9 @@ dispatch:
         vp1 = resolve(&stack[sp]);
         if(vp1->tag == V_ARRAY && stack[sp-1].tag == V_INT) {
             j = stack[sp-1]._int;
-            if(i < vp1->gc._arr->count) {
-                memcpy(&vp1->gc._arr->data[j], &stack[sp-2], sizeof(Value));
+            a = v2a(vp1);
+            if(i < a->count) {
+                memcpy(&a->data[j], &stack[sp-2], sizeof(Value));
             } else {
                 panic(0x22);
             }
@@ -668,8 +670,8 @@ static Value* compile(LexState *l) {
 
                 v = (Value*)gc_alloc(sizeof(Value) + m + 1);
                 v->tag = V_STRING;
-                v->gc.next = heap_root;
-                heap_root = &v->gc;
+                v->gc.next = heap_last;
+                heap_last = &v->gc;
                 v->gc._str = (char*)((u8*)v) + sizeof(Value);
                 memcpy(v->gc._str, xp, m);
                 v->gc._str[m] = 0;
@@ -687,6 +689,9 @@ _1:             x = (u16)v;
                 // TODO: is this always safe w/o any kind of checking?
                 //       should be right? since we recurse on [
                 goto _end;
+            case '(':
+                // TODO
+                break;
             case '+':
                 emit(OP_ADD);
                 break;
@@ -858,8 +863,8 @@ _end:
 
     result = (Value*)gc_alloc(sizeof(Value) + sizeof(Lambda) + code_size);
     result->tag = V_LAMBDA;
-    result->gc.next = heap_root;
-    heap_root = &result->gc;
+    result->gc.next = heap_last;
+    heap_last = &result->gc;
     result->gc._lam = (Lambda*)(((u8*)result) + sizeof(Value));
     result->gc._lam->code_size = code_size;
     memcpy(result->gc._lam->code, &comp_buf[mark], code_size);

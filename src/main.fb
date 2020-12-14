@@ -1,28 +1,19 @@
 _xs:
 
-"a" xs; apnd;!
-"b" xs; apnd;!
-"c" xs; apnd;!
-"d" xs; apnd;!
+1[$10<][
+    $xs;apnd;!
+    1+
+]#
 
-xs; cnt;! println;!
-
-0xs;,println;!
-1xs;,println;!
-2xs;,println;!
-3xs;,println;!
+xs;cnt;!println;!
 
 
-"e" xs; apnd;!
-
-xs; cnt;! println;!
-
-4xs;,println;!
-
-
-[
-    
-]
+0[$xs;cnt;!<][
+    $print;!
+    " = "print;!
+    $xs;,println;!
+    1+
+]#
 
 
 {
