@@ -1,18 +1,40 @@
-_xs:
+0x:
 
-1[$10<][
-    $xs;apnd;!
-    1+
-]#
+[0x1Bputchar;!]putesc:
+_colors:
 
-xs;cnt;!println;!
+"[41m"colors;apnd;!
+"[42m"colors;apnd;!
+"[43m"colors;apnd;!
+"[44m"colors;apnd;!
 
+[colors;,print;!]putcolor:
+[putesc;!putcolor;!]setcolor:
+[putesc;!"[0m"print;!]reset:
 
-0[$xs;cnt;!<][
-    $print;!
-    " = "print;!
-    $xs;,println;!
-    1+
+reset;!
+
+[true][
+    x;1+x:
+    x;setleds;!
+
+    putesc;!"[4D"print;!
+
+    x;0b00000011and;!setcolor;!" "print;!
+    x;0b00001100and;!2rsh;!setcolor;!" "print;!
+    x;0b00110000and;!4rsh;!setcolor;!" "print;!
+    x;0b11000000and;!6rsh;!setcolor;!" "print;!
+    reset;!
+    10putchar;!
+
+    50delayms;!
+
+    {-
+    250delayms;!
+    250delayms;!
+    250delayms;!
+    250delayms;!
+    -}
 ]#
 
 

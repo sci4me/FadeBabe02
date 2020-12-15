@@ -256,6 +256,51 @@ static void __cnt(void) {
     }
 }
 
+static void __rsh(void) {
+    --sp;
+    if(stack[sp].tag == V_INT && stack[sp-1].tag == V_INT) {
+        stack[sp-1]._int >>= stack[sp]._int;
+    } else {
+        panic(0x3D);
+    }
+}
+
+static void __lsh(void) {
+    --sp;
+    if(stack[sp].tag == V_INT && stack[sp-1].tag == V_INT) {
+        stack[sp-1]._int <<= stack[sp]._int;
+    } else {
+        panic(0x3C);
+    }
+}
+
+static void __and(void) {
+    --sp;
+    if(stack[sp].tag == V_INT && stack[sp-1].tag == V_INT) {
+        stack[sp-1]._int &= stack[sp]._int;
+    } else {
+        panic(0x3D);
+    }
+}
+
+static void __or(void) {
+    --sp;
+    if(stack[sp].tag == V_INT && stack[sp-1].tag == V_INT) {
+        stack[sp-1]._int |= stack[sp]._int;
+    } else {
+        panic(0x3B);
+    }
+}
+
+static void __xor(void) {
+    --sp;
+    if(stack[sp].tag == V_INT && stack[sp-1].tag == V_INT) {
+        stack[sp-1]._int ^= stack[sp]._int;
+    } else {
+        panic(0x3A);
+    }
+}
+
 static void init_natives(void) {
     #define addnative(name) do { intern(#name, sizeof(#name)-1); globals[i].tag = V_NATIVE; globals[i].native = __##name; ++i; } while(0)
     u8 i = 0;
@@ -271,6 +316,11 @@ static void init_natives(void) {
     addnative(switch2_read);
     addnative(apnd);
     addnative(cnt);
+    addnative(rsh);
+    addnative(lsh);
+    addnative(and);
+    addnative(or);
+    addnative(xor);
 
     #undef addnative
 }
